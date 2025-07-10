@@ -14,8 +14,7 @@ pub struct NotSend {
     _0: PhantomData<*const ()>,
 }
 
-#[cfg_attr(feature = "riscv-mecall-backend", rtic::app(device = e310x))]
-#[cfg_attr(feature = "riscv-clint-backend", rtic::app(device = e310x, backend = H0))]
+#[rtic::app(device = e310x)]
 mod app {
     use super::e310x;
     use super::NotSend;

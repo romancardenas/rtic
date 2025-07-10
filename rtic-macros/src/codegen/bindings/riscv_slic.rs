@@ -18,7 +18,7 @@ pub fn interrupt_ident() -> Ident {
 
 pub fn interrupt_mod(_app: &App) -> TokenStream2 {
     let interrupt = interrupt_ident();
-    quote!(slic::#interrupt)
+    quote!(#interrupt)
 }
 
 /// This macro implements the [`rtic::Mutex`] trait for shared resources using the SLIC.
@@ -95,7 +95,7 @@ pub fn pre_init_checks(app: &App, _analysis: &SyntaxAnalysis) -> Vec<TokenStream
     let mut stmts: Vec<TokenStream2> = vec![];
     let int_mod = interrupt_mod(app);
 
-    // check that all dispatchers exists in the `slic::Interrupt` enumeration
+    // check that all dispatchers exists in the `SoftwareInterrupt` enumeration
     for name in app.args.dispatchers.keys() {
         stmts.push(quote!(let _ = #int_mod::#name;));
     }
@@ -108,6 +108,7 @@ pub fn pre_init_checks(app: &App, _analysis: &SyntaxAnalysis) -> Vec<TokenStream
 pub fn pre_init_enable_interrupts(app: &App, analysis: &CodegenAnalysis) -> Vec<TokenStream2> {
     let mut stmts = vec![];
 
+    let int_mod = interrupt_mod(app);
     let interrupt_ids = analysis.interrupts.iter().map(|(p, (id, _))| (p, id));
     for (&p, name) in interrupt_ids.chain(
         app.hardware_tasks
@@ -115,7 +116,7 @@ pub fn pre_init_enable_interrupts(app: &App, analysis: &CodegenAnalysis) -> Vec<
             .map(|task| (&task.args.priority, &task.args.binds)),
     ) {
         stmts.push(quote!(
-            rtic::export::set_priority(slic::SoftwareInterrupt::#name, #p);
+            rtic::export::set_priority(#int_mod::#name, #p);
         ));
     }
 
@@ -148,13 +149,6 @@ pub fn architecture_specific_analysis(app: &App, _analysis: &SyntaxAnalysis) -> 
 
         return Err(parse::Error::new(first.unwrap().span(), s));
     }
-    #[cfg(feature = "riscv-clint")]
-    if app.args.backend.is_none() {
-        return Err(parse::Error::new(
-            Span::call_site(),
-            "CLINT requires backend-specific configuration",
-        ));
-    }
 
     Ok(())
 }
@@ -177,11 +171,11 @@ pub fn check_stack_overflow_before_init(
         // Check for stack overflow using symbols from `risc-v-rt`.
         extern "C" {
             pub static _stack_start: u32;
-            pub static _ebss: u32;
+            pub static __ebss: u32;
         }
 
         let stack_start = &_stack_start as *const _ as u32;
-        let ebss = &_ebss as *const _ as u32;
+        let ebss = &__ebss as *const _ as u32;
 
         if stack_start > ebss {
             // No flip-link usage, check the SP for overflow.
@@ -216,15 +210,18 @@ pub fn async_prio_limit(_app: &App, analysis: &CodegenAnalysis) -> Vec<TokenStre
 }
 
 pub fn handler_config(
-    _app: &App,
+    app: &App,
     _analysis: &CodegenAnalysis,
-    _dispatcher_name: Ident,
+    dispatcher_name: Ident,
 ) -> Vec<TokenStream2> {
-    vec![]
+    let slic = quote! { rtic::export::riscv_slic };
+    let int_mod = interrupt_mod(app);
+    vec![quote! {#[rtic::export::int_macro(#int_mod::#dispatcher_name, slic = #slic)]}]
 }
 
-/// The SLIC requires us to call to the [`riscv_rtic::codegen`] macro to generate
-/// the appropriate SLIC structure, interrupt enumerations, etc.
+/// The SLIC requires us to add the [`riscv_rtic::swi`] attribute to the
+/// `SoftwareInterrupt` enum. This macro generates the appropriate SLIC
+/// structure, implement required traits over interrupt enumerations, etc.
 pub fn extra_modules(app: &App, _analysis: &SyntaxAnalysis) -> Vec<TokenStream2> {
     let mut stmts = vec![];
 
@@ -239,22 +236,23 @@ pub fn extra_modules(app: &App, _analysis: &SyntaxAnalysis) -> Vec<TokenStream2>
 
     let device = &app.args.device;
 
-    stmts.push(quote!(
-        use rtic::export::riscv_slic;
-    ));
-    let slic = quote! {rtic::export::riscv_slic};
+    let attr = match app.args.backend.as_ref().map(|b| &b.0) {
+        Some(backend) => {
+            quote! {#[rtic::export::swi(slic = rtic::export::riscv_slic, pac = #device, backend = #backend)]}
+        }
+        None => {
+            quote! {#[rtic::export::swi(slic = rtic::export::riscv_slic, pac = #device)]}
+        }
+    };
 
-    match () {
-        #[cfg(feature = "riscv-clint")]
-        () => {
-            let hart_id = &app.args.backend.as_ref().unwrap().hart_id;
-            stmts.push(quote!(rtic::export::codegen!(slic = #slic, pac = #device, swi = [#(#swi_slice,)*], backend = [hart_id = #hart_id]);));
+    stmts.push(quote! {
+        #attr
+        #[allow(missing_docs)]
+        #[derive(Copy, Clone)]
+        pub enum SoftwareInterrupt {
+            #(#swi_slice,)*
         }
-        #[cfg(feature = "riscv-mecall")]
-        () => {
-            stmts.push(quote!(rtic::export::codegen!(slic = #slic, pac = #device, swi = [#(#swi_slice,)*]);));
-        }
-    }
+    });
 
     stmts
 }

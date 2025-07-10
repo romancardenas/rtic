@@ -7,7 +7,7 @@ pub use riscv_slic::{InterruptNumber, lock, pend, run};
 compile_error!("Building for the riscv-slic, but no compatible backend selected");
 
 /// USE CASE RE-EXPORTS: needed for SLIC-only
-pub use riscv_slic::{self, codegen, set_priority};
+pub use riscv_slic::{self, interrupt as int_macro, set_priority, swi};
 
 pub mod interrupt {
     #[inline]

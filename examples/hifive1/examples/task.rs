@@ -8,8 +8,7 @@
 use hifive1::hal::e310x;
 use riscv_rt as _;
 
-#[cfg_attr(feature = "riscv-mecall-backend", rtic::app(device = e310x))]
-#[cfg_attr(feature = "riscv-clint-backend", rtic::app(device = e310x, backend = H0))]
+#[rtic::app(device = e310x)]
 mod app {
     use super::e310x;
     use semihosting::{println, process::exit};

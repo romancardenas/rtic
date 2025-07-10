@@ -1,27 +1,17 @@
+use proc_macro2::TokenStream;
 use syn::{
     parse::{Parse, ParseStream},
     Result,
 };
 
 #[derive(Debug)]
-pub struct BackendArgs {
-    #[cfg(feature = "riscv-clint")]
-    pub hart_id: syn::Ident,
-}
+pub struct BackendArgs(pub Option<TokenStream>);
 
 impl Parse for BackendArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        match () {
-            #[cfg(feature = "riscv-clint")]
-            () => {
-                let hart_id = input.parse()?;
-                Ok(BackendArgs { hart_id })
-            }
-            #[cfg(feature = "riscv-mecall")]
-            () => Err(syn::Error::new(
-                input.span(),
-                "riscv-mecall backend does not accept any arguments",
-            )),
+        match input.is_empty() {
+            true => Ok(BackendArgs(None)),
+            false => Ok(BackendArgs(Some(input.parse()?))),
         }
     }
 }

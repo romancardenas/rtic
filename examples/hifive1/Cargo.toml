@@ -11,9 +11,13 @@ edition = "2021"
 [dependencies]
 rtic = { path = "../../rtic" }
 heapless = { version = "0.8.0", features = ["portable-atomic-unsafe-assume-single-core"] }
-hifive1 = { version = "0.13.0", features = ["board-redv"] }
-riscv-rt = {version = "0.13.0", features = ["single-hart"]}
-riscv = "0.12.1"
+# hifive1 = { version = "0.13.0", features = ["board-redv"] }
+# riscv-rt = {version = "0.13.0", features = ["single-hart"]}
+# riscv = "0.12.1"
+
+hifive1 = { git = "https://github.com/dmunizu/e310x.git", branch = "rvp-rework-conference", features = ["board-redv"] }
+riscv-rt = { git = "https://github.com/rust-embedded/riscv.git", branch = "post-init" }
+riscv = { git = "https://github.com/rust-embedded/riscv.git", branch = "post-init" }
 semihosting = { version = "0.1", features = ["stdio", "panic-handler"] }
 portable-atomic = { version = "1", features = ["unsafe-assume-single-core", "force-amo"] }
 
